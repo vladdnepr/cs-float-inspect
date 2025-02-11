@@ -14,7 +14,7 @@ const winston = require('winston'),
     InspectURL = require('./lib/inspect_url'),
     botController = new (require('./lib/bot_controller'))(),
     CONFIG = require(args.config),
-    postgres = new (require('./lib/postgres'))(CONFIG.database_url, CONFIG.enable_bulk_inserts),
+    postgres = new (require('./lib/postgres'))(CONFIG.database_url, CONFIG.enable_bulk_inserts, CONFIG.cache_charms),
     gameData = new (require('./lib/game_data'))(CONFIG.game_files_update_interval, CONFIG.enable_game_file_updates),
     errors = require('./errors'),
     Job = require('./lib/job');
@@ -245,8 +245,20 @@ queue.process(CONFIG.logins.length, botController, async (job) => {
     itemData.iteminfo = Object.assign(itemData.iteminfo, await postgres.getItemRank(itemData.iteminfo.a));
     gameData.addAdditionalItemProperties(itemData.iteminfo);
 
+    // Normalize keychain properties before removing null values
+    if (itemData.iteminfo.keychains) {
+        itemData.iteminfo.keychains = itemData.iteminfo.keychains.map(keychain => {
+            if (keychain.sticker_id !== undefined) {
+                keychain.stickerId = keychain.sticker_id;
+                delete keychain.sticker_id;
+            }
+            return keychain;
+        });
+    }
+
     itemData.iteminfo = utils.removeNullValues(itemData.iteminfo);
     itemData.iteminfo.stickers = itemData.iteminfo.stickers.map((s) => utils.removeNullValues(s));
+    itemData.iteminfo.keychains = itemData.iteminfo.keychains.map((s) => utils.removeNullValues(s));
 
     job.data.job.setResponse(job.data.link.getParams().a, itemData.iteminfo);
 
